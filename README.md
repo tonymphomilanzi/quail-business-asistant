@@ -1,4 +1,4 @@
-# 🐦 Quail Farming Profit Calculator (React + Tailwind + Recharts)
+#  Quail Farming Profit Business Assistant (React + Tailwind + Recharts)
 
 > **A modern profit calculator for quail farmers.**  
 > Built to help small-scale and aspiring farmers in Malawi (and beyond) compare profits from **selling quail eggs** vs **hatching and selling chicks** — with live charts, instant results, and sensitivity analysis.  
