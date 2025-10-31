@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* small helpers */
+:root {
+  --gold: #F0B90B;
+  --dark: #0B0E11;
+  --panel: #0f1720;
+}
+
+body {
+  background: var(--dark);
+  color: #e6eef6;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
