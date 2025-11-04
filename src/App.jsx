@@ -10,6 +10,9 @@ import {
 } from "recharts";
 
 export default function QuailCalculatorSaaS() {
+  const [currency, setCurrency] = useState("MWK");
+  const [exchangeRate, setExchangeRate] = useState(1800); // fallback rate
+
   // --- Inputs ---
   const [birds, setBirds] = useState(100);
   const [pctFemale, setPctFemale] = useState(80);
@@ -23,6 +26,18 @@ export default function QuailCalculatorSaaS() {
   const [otherCostsMonth, setOtherCostsMonth] = useState(30000);
   const [cycleWeeks, setCycleWeeks] = useState(8);
   const [sensitivityOn, setSensitivityOn] = useState(true);
+
+  // --- Fetch USD→MWK exchange rate ---
+  useEffect(() => {
+    fetch("https://api.exchangerate.host/latest?base=USD&symbols=MWK")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.rates?.MWK) setExchangeRate(data.rates.MWK);
+      })
+      .catch(() => console.warn("Failed to fetch rate, using fallback"));
+  }, []);
+
+  const rate = currency === "USD" ? 1 / exchangeRate : 1; // adjust multiplier
 
   // --- Core calculations ---
   const results = useMemo(() => {
@@ -39,8 +54,10 @@ export default function QuailCalculatorSaaS() {
     const feedCostCycle = feedKgPerCycle * feedPriceKg;
     const otherCostCycle = (otherCostsMonth * cycleWeeks) / 4.33;
 
-    const netEggCycle = eggRevMonth * (cycleWeeks / 4.33) - feedCostCycle - otherCostCycle;
-    const netChickCycle = chickRevCycle - feedCostCycle - otherCostCycle;
+    const netEggCycle =
+      eggRevMonth * (cycleWeeks / 4.33) - feedCostCycle - otherCostCycle;
+    const netChickCycle =
+      chickRevCycle - feedCostCycle - otherCostCycle;
 
     return {
       f,
@@ -73,28 +90,41 @@ export default function QuailCalculatorSaaS() {
   // --- Sensitivity ---
   const sensitivity = useMemo(() => {
     const hatchRange = Array.from({ length: 9 }, (_, i) => 50 + i * 5);
-    const eggPriceRange = Array.from({ length: 9 }, (_, i) => Math.round(50 + i * 25));
-    const feedPriceRange = Array.from({ length: 9 }, (_, i) => Math.round(400 + i * 80));
+    const eggPriceRange = Array.from({ length: 9 }, (_, i) =>
+      Math.round(50 + i * 25)
+    );
+    const feedPriceRange = Array.from({ length: 9 }, (_, i) =>
+      Math.round(400 + i * 80)
+    );
 
     return {
       dataByHatch: hatchRange.map((hr) => ({
         name: `${hr}%`,
-        value: Math.round(results.fertileCycle * (hr / 100) * chickPrice - results.feedCostCycle - results.otherCostCycle),
+        value:
+          (results.fertileCycle * (hr / 100) * chickPrice -
+            results.feedCostCycle -
+            results.otherCostCycle) * rate,
       })),
       dataByEggPrice: eggPriceRange.map((ep) => ({
         name: `${ep}`,
-        value: Math.round(results.eggsMonth * ep * (cycleWeeks / 4.33) - results.feedCostCycle - results.otherCostCycle),
+        value:
+          (results.eggsMonth * ep * (cycleWeeks / 4.33) -
+            results.feedCostCycle -
+            results.otherCostCycle) * rate,
       })),
       dataByFeedPrice: feedPriceRange.map((fp) => ({
         name: `${fp}`,
-        value: Math.round(results.chickRevCycle - results.feedKgPerCycle * fp - results.otherCostCycle),
+        value:
+          (results.chickRevCycle -
+            results.feedKgPerCycle * fp -
+            results.otherCostCycle) * rate,
       })),
     };
-  }, [results, chickPrice, cycleWeeks]);
+  }, [results, chickPrice, cycleWeeks, rate]);
 
   function exportSensitivityCSV() {
     const lines = [
-      ["type", "variable", "value"],
+      ["type", "variable", "value (" + currency + ")"],
       ...sensitivity.dataByHatch.map((r) => ["hatchRate", r.name, r.value]),
       ...sensitivity.dataByEggPrice.map((r) => ["eggPrice", r.name, r.value]),
       ...sensitivity.dataByFeedPrice.map((r) => ["feedPrice", r.name, r.value]),
@@ -104,19 +134,38 @@ export default function QuailCalculatorSaaS() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "quail_sensitivity.csv";
+    a.download = `quail_sensitivity_${currency}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const formatMoney = (value) =>
+    `${currency === "USD" ? "$" : "MK"} ${(
+      value * rate
+    ).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
   return (
     <div className="p-4 md:p-6 min-h-screen bg-gray-50 text-black">
       <div className="bg-white rounded-2xl shadow p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* --- MAIN PANEL --- */}
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-xl md:text-2xl font-semibold">Quail Business — Eggs vs Hatchlings</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl md:text-2xl font-semibold">
+              Quail Business — Eggs vs Hatchlings
+            </h2>
+            <button
+              onClick={() =>
+                setCurrency(currency === "MWK" ? "USD" : "MWK")
+              }
+              className="text-sm bg-teal-600 text-white px-3 py-1 rounded-md"
+            >
+              Switch to {currency === "MWK" ? "USD" : "MWK"}
+            </button>
+          </div>
+          <p className="text-sm text-gray-600"> Interactive calculator with sensitivity analysis. Tweak inputs to see instant profit/loss changes.</p>
           <p className="text-sm text-gray-600">
-            Interactive calculator with sensitivity analysis. Tweak inputs to see instant profit changes.
+            Calculator supports real-time USD ⇄ MWK conversion (1 USD ≈{" "}
+            {exchangeRate.toLocaleString()} MWK)
           </p>
 
           {/* Inputs */}
@@ -125,14 +174,14 @@ export default function QuailCalculatorSaaS() {
               ["Number of birds", birds, setBirds],
               ["% Female", pctFemale, setPctFemale],
               ["Eggs / hen / week", eggsPerHenWeek, setEggsPerHenWeek],
-              ["Egg price (MK)", eggPrice, setEggPrice],
-              ["Chick sell price (MK)", chickPrice, setChickPrice],
+              [`Egg price (${currency})`, eggPrice, setEggPrice],
+              [`Chick sell price (${currency})`, chickPrice, setChickPrice],
               ["Cycle (weeks)", cycleWeeks, setCycleWeeks],
               ["Fertility %", fertility, setFertility],
               ["Hatch rate %", hatchRate, setHatchRate],
               ["Feed (g/bird/day)", feedGramPerBird, setFeedGramPerBird],
-              ["Feed price (MK/kg)", feedPriceKg, setFeedPriceKg],
-              ["Other costs (MK/month)", otherCostsMonth, setOtherCostsMonth],
+              [`Feed price (${currency}/kg)`, feedPriceKg, setFeedPriceKg],
+              [`Other costs (${currency}/month)`, otherCostsMonth, setOtherCostsMonth],
             ].map(([label, value, setter]) => (
               <div key={label} className="flex flex-col">
                 <label className="text-xs md:text-sm font-medium">{label}</label>
@@ -154,7 +203,7 @@ export default function QuailCalculatorSaaS() {
                 <div className="font-bold text-lg">{results.eggsWeek.toLocaleString()}</div>
                 <div className="text-gray-500">Egg revenue / month</div>
                 <div className="font-semibold text-teal-700">
-                  MK {results.eggRevMonth.toLocaleString()}
+                  {formatMoney(results.eggRevMonth)}
                 </div>
               </div>
               <div>
@@ -162,29 +211,29 @@ export default function QuailCalculatorSaaS() {
                 <div className="font-bold text-lg">{results.chicksCycle.toLocaleString()}</div>
                 <div className="text-gray-500">Chick revenue / cycle</div>
                 <div className="font-semibold text-teal-700">
-                  MK {results.chickRevCycle.toLocaleString()}
+                  {formatMoney(results.chickRevCycle)}
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="text-gray-500">Feed cost / cycle</div>
-              <div>MK {results.feedCostCycle.toLocaleString()}</div>
+              <div>{formatMoney(results.feedCostCycle)}</div>
               <div className="text-gray-500">Other cost / cycle</div>
-              <div>MK {results.otherCostCycle.toLocaleString()}</div>
+              <div>{formatMoney(results.otherCostCycle)}</div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
               <div>
                 <div className="text-gray-500">Net profit (eggs)</div>
                 <div className="font-bold text-green-600">
-                  MK {results.netEggCycle.toLocaleString()}
+                  {formatMoney(results.netEggCycle)}
                 </div>
               </div>
               <div>
                 <div className="text-gray-500">Net profit (chicks)</div>
                 <div className="font-bold text-green-600">
-                  MK {results.netChickCycle.toLocaleString()}
+                  {formatMoney(results.netChickCycle)}
                 </div>
               </div>
             </div>
@@ -200,20 +249,7 @@ export default function QuailCalculatorSaaS() {
                 className="w-full bg-teal-600 text-white py-2 rounded-md text-sm"
                 onClick={() =>
                   navigator.clipboard.writeText(
-                    JSON.stringify({
-                      inputs: {
-                        birds,
-                        pctFemale,
-                        eggsPerHenWeek,
-                        eggPrice,
-                        fertility,
-                        hatchRate,
-                        feedPriceKg,
-                        otherCostsMonth,
-                        cycleWeeks,
-                      },
-                      results,
-                    })
+                    JSON.stringify({ currency, exchangeRate, results }, null, 2)
                   )
                 }
               >
@@ -236,12 +272,13 @@ export default function QuailCalculatorSaaS() {
 
           {sensitivityOn && (
             <div className="bg-gray-50 border rounded-lg p-3">
-              <h4 className="font-semibold text-sm md:text-base mb-2">Sensitivity (quick view)</h4>
+              <h4 className="font-semibold text-sm md:text-base mb-2">
+                Sensitivity (quick view)
+              </h4>
               <div className="text-xs text-gray-600 mb-3">
                 Scroll horizontally to view full chart on mobile.
               </div>
 
-              {/* Responsive scroll container for charts */}
               <div className="space-y-4 overflow-x-auto">
                 {[
                   ["Hatch rate impact (net chick profit)", sensitivity.dataByHatch, "#0ea5a4"],
@@ -256,7 +293,13 @@ export default function QuailCalculatorSaaS() {
                         <XAxis dataKey="name" />
                         <YAxis />
                         <Tooltip />
-                        <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke={color}
+                          strokeWidth={2}
+                          dot={false}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
